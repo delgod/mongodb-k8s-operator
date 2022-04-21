@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 
 
+import json
 import logging
 from pathlib import Path
 
@@ -47,7 +48,44 @@ async def test_build_and_deploy(ops_test: OpsTest):
 async def test_application_is_up(ops_test: OpsTest):
     status = await ops_test.model.get_status()  # noqa: F821
     address = status["applications"][APP_NAME]["units"][f"{APP_NAME}/0"]["address"]
-
-    logger.info("querying address: %s", address)
     response = MongoClient(address, directConnection=True).admin.command("ping")
     assert response["ok"] == 1
+
+
+@pytest.mark.abort_on_fail
+async def test_application_is_up_internally(ops_test: OpsTest):
+    status = await ops_test.model.get_status()  # noqa: F821
+    address = status["applications"][APP_NAME]["units"][f"{APP_NAME}/0"]["address"]
+    action = await ops_test.model.units.get(f"{APP_NAME}/0").run_action("get-admin-password")
+    action = await action.wait()
+    password = action.results["admin-password"]
+
+    mongo_op = "rs.status()"
+    mongo_cmd = (
+        f"mongo --quiet --eval 'JSON.stringify({mongo_op})' "
+        f"mongodb://operator:{password}@{address}/admin"
+    )
+    kubectl_cmd = (
+        "microk8s",
+        "kubectl",
+        "run",
+        "--rm",
+        "-i",
+        "-q",
+        "--restart=Never",
+        "--command",
+        f"--namespace={ops_test.model_name}",
+        "mongo-test",
+        "--image=mongo:4.4",
+        "--",
+        "sh",
+        "-c",
+        mongo_cmd,
+    )
+
+    ret_code, stdout, stderr = await ops_test.run(*kubectl_cmd)
+    responce_obj = json.loads(stdout)
+    primary = [
+        member["name"] for member in responce_obj["members"] if member["stateStr"] == "PRIMARY"
+    ][0]
+    assert primary == "mongodb-k8s-0.mongodb-k8s-endpoints:27017"
