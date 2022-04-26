@@ -46,6 +46,11 @@ class MongoDBCharm(CharmBase):
         self.framework.observe(self.on.start, self._on_start)
         self.framework.observe(self.on[PEER].relation_changed, self._reconfigure)
         self.framework.observe(self.on[PEER].relation_departed, self._reconfigure)
+        self.framework.observe(self.on.get_password_action, self._get_password_action)
+
+    def _get_password_action(self, event):
+        """Output password used to access mongodb."""
+        event.set_results({"password": self._app_data["admin_password"]})
 
     def _on_leader_elected(self, _) -> None:
         """Assume leadership.
