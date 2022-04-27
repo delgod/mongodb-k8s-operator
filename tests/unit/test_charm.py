@@ -16,7 +16,7 @@ def harness():
     }
     harness.add_oci_resource("mongodb-image", mongo_resource)
     harness.begin()
-    harness.add_relation("mongodb", "mongodb")
+    harness.add_relation("database-peers", "mongodb-peers")
     harness.set_leader(True)
     yield harness
     harness.cleanup()
@@ -33,7 +33,7 @@ def test_mongod_pebble_ready(harness):
                 "summary": "mongod",
                 "command": (
                     "mongod --bind_ip_all --auth "
-                    "--replSet=mongodb "
+                    "--replSet=mongodb-k8s "
                     "--clusterAuthMode=keyFile "
                     "--keyFile=/etc/mongodb/keyFile"
                 ),

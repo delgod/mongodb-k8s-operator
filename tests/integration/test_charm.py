@@ -2,7 +2,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import json
+
 from helpers import (
     METADATA,
     APP_NAME,
@@ -11,6 +11,7 @@ from helpers import (
     run_mongod_command
 )
 import logging
+import os
 
 import pytest
 from pymongo import MongoClient
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.skipif(
-    True,
+    os.environ.get("PYTEST_SKIP_DEPLOY", True),
     reason="skipping deploy, model expected to be provided.",
 )
 @pytest.mark.abort_on_fail
@@ -66,11 +67,8 @@ async def test_application_primary(ops_test: OpsTest):
     assert has_primary, "mongod has no primary on deployment"
 
     number_of_primaries = 0
-    primary = None
     for member in rs_status["members"]:
         if member["stateStr"] == "PRIMARY":
             number_of_primaries += 1
-            primary = member
 
     assert number_of_primaries == 1, "more than one primary in replica set"
-    assert primary['name'] == 'mongodb-0.mongodb-endpoints:27017', "primary not leader on deployment"

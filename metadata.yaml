@@ -1,7 +1,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-name: mongodb
+name: mongodb-k8s
 display-name: |
     Charmed Operator for MongoDB
 description: |
@@ -10,11 +10,13 @@ description: |
     supports replicated MongoDB databases.
 summary: A MongoDB operator charm for Kubernetes
 peers:
-  mongodb:
-    interface: mongodb
+  database-peers:
+    interface: mongodb-peers
 provides:
   database:
-    interface: mongodb_datastore
+    interface: mongodb-client
+  obsolete:
+    interface: mongodb
 containers:
   mongod:
     resource: mongodb-image
@@ -29,4 +31,4 @@ resources:
 storage:
   db:
     type: filesystem
-    location: db
+    location: /data/db
