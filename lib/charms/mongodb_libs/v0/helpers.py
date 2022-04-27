@@ -1,3 +1,7 @@
+"""Simple functions, which can be used in both K8s and VM charms."""
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 import string
 import secrets
 import logging
@@ -11,7 +15,7 @@ LIBID = "1057f353503741a98ed79309b5be7e31"
 LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
-# to 0 if you are raising the major API version
+# to 0 if you are raising the major API version.
 LIBPATCH = 0
 
 # path to store mongodb ketFile
@@ -39,10 +43,11 @@ def get_create_user_cmd(config: MongoDBConfiguration) -> List[str]:
         "--quiet",
         "--eval",
         "db.createUser({"
-        f"  user: '{config.admin_user}',"
+        f"  user: '{config.username}',"
         "  pwd: passwordPrompt(),"
         "  roles:["
-        "    {'role': 'userAdmin', 'db': 'admin'}, "
+        "    {'role': 'userAdminAnyDatabase', 'db': 'admin'}, "
+        "    {'role': 'readWriteAnyDatabase', 'db': 'admin'}, "
         "    {'role': 'clusterAdmin', 'db': 'admin'}, "
         "  ],"
         "  mechanisms: ['SCRAM-SHA-256'],"
@@ -55,8 +60,7 @@ def get_mongod_cmd(config: MongoDBConfiguration) -> str:
     """Construct the MongoDB startup command line.
 
     Returns:
-        A string representing the command used to start MongoDB in the
-        workload container.
+        A string representing the command used to start MongoDB.
     """
     cmd = [
         "mongod",
@@ -65,7 +69,7 @@ def get_mongod_cmd(config: MongoDBConfiguration) -> str:
         # enable auth
         "--auth",
         # part of replicaset
-        f"--replSet={config.replset_name}",
+        f"--replSet={config.replset}",
         # keyFile used for authentication replica set peers
         # TODO: replace with x509
         "--clusterAuthMode=keyFile",
