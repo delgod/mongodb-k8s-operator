@@ -25,7 +25,7 @@ from charms.mongodb_libs.v0.mongodb import (
     MongoDBConnection,
     NotReadyError,
 )
-from ops.charm import CharmBase, ActionEvent
+from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, Container
 from ops.pebble import ExecError, Layer, PathError, ProtocolError

@@ -1,17 +1,14 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 import json
-import yaml
+import logging
 from pathlib import Path
-from pytest_operator.plugin import OpsTest
-import string
-import random
 
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_fixed,
-)
+import yaml
+from pytest_operator.plugin import OpsTest
+
+logger = logging.getLogger(__name__)
+
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 ADMIN_USER = "operator"
@@ -20,9 +17,22 @@ UNIT_IDS = [0, 1, 2]
 PORT = 27017
 
 
+async def get_leader_id(ops_test: OpsTest) -> int:
+    """Returns the unit number of the juju leader unit."""
+    leader_unit_id = 0
+    for unit in ops_test.model.applications[APP_NAME].units:
+        if await unit.is_leader_from_status():
+            return leader_unit_id
+
+        leader_unit_id += 1
+
+    return leader_unit_id
+
+
 async def get_password(ops_test: OpsTest, unit_id: int) -> str:
     """Use the charm action to retrieve the password.
-    Return:
+
+    Returns:
         String with the password stored on the peer relation databag.
     """
     action = await ops_test.model.units.get(f"{APP_NAME}/{unit_id}").run_action(
@@ -38,11 +48,6 @@ async def get_address_of_unit(ops_test: OpsTest, unit_id: int) -> str:
     return status["applications"][APP_NAME]["units"][f"{APP_NAME}/{unit_id}"]["address"]
 
 
-@retry(
-    stop=stop_after_attempt(10),
-    wait=wait_fixed(3),
-    reraise=True,
-)
 async def run_mongod_command(ops_test: OpsTest, mongo_op: str) -> str:
     """Runs provided MongoDB operation in a separate container."""
     unit_id = 0
@@ -52,12 +57,6 @@ async def run_mongod_command(ops_test: OpsTest, mongo_op: str) -> str:
         f"mongo --quiet --eval 'JSON.stringify({mongo_op})' "
         f"mongodb://operator:{password}@{address}/admin"
     )
-
-    # randomise container name so that it doesn't connect to an old one
-    key = "".join([random.choice(string.ascii_letters) for _ in range(8)])
-    key = key.lower()
-    container_name = f"mongo-test-{key}"
-
     kubectl_cmd = (
         "microk8s",
         "kubectl",
@@ -68,7 +67,7 @@ async def run_mongod_command(ops_test: OpsTest, mongo_op: str) -> str:
         "--restart=Never",
         "--command",
         f"--namespace={ops_test.model_name}",
-        container_name,
+        "mongo-test",
         "--image=mongo:4.4",
         "--",
         "sh",
@@ -77,5 +76,7 @@ async def run_mongod_command(ops_test: OpsTest, mongo_op: str) -> str:
     )
 
     ret_code, stdout, stderr = await ops_test.run(*kubectl_cmd)
-    responce_obj = json.loads(stdout)
-    return responce_obj
+    if ret_code != 0:
+        logger.error("code %r; stdout %r; stderr: %r", ret_code, stdout, stderr)
+        return None
+    return json.loads(stdout)
