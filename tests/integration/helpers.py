@@ -1,11 +1,11 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import json
+import logging
 from pathlib import Path
 
-import json
 import yaml
-import logging
 from pytest_operator.plugin import OpsTest
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
@@ -19,9 +19,7 @@ async def get_address_of_unit(ops_test: OpsTest) -> str:
 
 
 async def get_password(ops_test: OpsTest) -> str:
-    action = await ops_test.model.units.get(f"{APP_NAME}/0").run_action(
-        "get-admin-password"
-    )
+    action = await ops_test.model.units.get(f"{APP_NAME}/0").run_action("get-admin-password")
     action = await action.wait()
     return action.results["admin-password"]
 

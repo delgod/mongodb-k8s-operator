@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 
 import logging
+
 import pytest
 from helpers import APP_NAME, METADATA, get_address_of_unit, run_mongo_op
 from pymongo import MongoClient
