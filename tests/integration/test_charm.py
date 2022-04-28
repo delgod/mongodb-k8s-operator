@@ -2,20 +2,13 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-
-import json
 import logging
-from pathlib import Path
-
 import pytest
-import yaml
+from helpers import APP_NAME, METADATA, get_address_of_unit, run_mongo_op
 from pymongo import MongoClient
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
-
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-APP_NAME = METADATA["name"]
 
 
 @pytest.mark.abort_on_fail
@@ -46,47 +39,15 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
 @pytest.mark.abort_on_fail
 async def test_application_is_up(ops_test: OpsTest):
-    status = await ops_test.model.get_status()  # noqa: F821
-    address = status["applications"][APP_NAME]["units"][f"{APP_NAME}/0"]["address"]
+    address = await get_address_of_unit(ops_test)
     response = MongoClient(address, directConnection=True).admin.command("ping")
     assert response["ok"] == 1
 
 
 @pytest.mark.abort_on_fail
 async def test_application_is_up_internally(ops_test: OpsTest):
-    status = await ops_test.model.get_status()  # noqa: F821
-    address = status["applications"][APP_NAME]["units"][f"{APP_NAME}/0"]["address"]
-    action = await ops_test.model.units.get(f"{APP_NAME}/0").run_action("get-admin-password")
-    action = await action.wait()
-    password = action.results["admin-password"]
-
-    mongo_op = "rs.status()"
-    mongo_cmd = (
-        f"mongo --quiet --eval 'JSON.stringify({mongo_op})' "
-        f"mongodb://operator:{password}@{address}/admin"
-    )
-    kubectl_cmd = (
-        "microk8s",
-        "kubectl",
-        "run",
-        "--rm",
-        "-i",
-        "-q",
-        "--restart=Never",
-        "--command",
-        f"--namespace={ops_test.model_name}",
-        "mongo-test",
-        "--image=mongo:4.4",
-        "--",
-        "sh",
-        "-c",
-        mongo_cmd,
-    )
-
-    ret_code, stdout, stderr = await ops_test.run(*kubectl_cmd)
-    logger.info("code %r; stdout %r; stderr: %r", ret_code, stdout, stderr)
-    responce_obj = json.loads(stdout)
+    response_obj = await run_mongo_op(ops_test, "rs.status()")
     primary = [
-        member["name"] for member in responce_obj["members"] if member["stateStr"] == "PRIMARY"
+        member["name"] for member in response_obj["members"] if member["stateStr"] == "PRIMARY"
     ][0]
     assert primary == "mongodb-k8s-0.mongodb-k8s-endpoints:27017"
