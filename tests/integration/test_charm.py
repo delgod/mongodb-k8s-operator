@@ -84,6 +84,7 @@ async def test_application_is_up_internally(ops_test: OpsTest):
     )
 
     ret_code, stdout, stderr = await ops_test.run(*kubectl_cmd)
+    logger.info("code %r; stdout %r; stderr: %r", ret_code, stdout, stderr)
     responce_obj = json.loads(stdout)
     primary = [
         member["name"] for member in responce_obj["members"] if member["stateStr"] == "PRIMARY"
