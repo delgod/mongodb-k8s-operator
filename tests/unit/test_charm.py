@@ -6,7 +6,7 @@ from unittest import mock
 from unittest.mock import patch
 
 from ops.model import ActiveStatus, ModelError
-from ops.pebble import APIError, ExecError
+from ops.pebble import APIError, ExecError, PathError, ProtocolError
 from ops.testing import Harness
 from pymongo.errors import ConfigurationError, ConnectionFailure, OperationFailure
 
@@ -68,6 +68,61 @@ class TestCharm(unittest.TestCase):
         # Ensure we set an ActiveStatus with no message
         assert self.harness.model.unit.status == ActiveStatus()
 
+    @patch("charm.MongoDBCharm._set_keyfile")
+    def test_pebble_ready_cannot_retrieve_container(self, set_keyfile):
+        """Test verifies behavior when retrieving container results in ModelError in pebble ready.
+
+        Verifies that when a failure to get a container occurs, that that failure is raised and
+        that no efforts to set keyFile or add/replan layers are made.
+        """
+        # presets
+        self.harness.set_leader(True)
+        mock_container = mock.Mock()
+        mock_container.side_effect = ModelError
+        self.harness.charm.unit.get_container = mock_container
+
+        with self.assertRaises(ModelError):
+            self.harness.charm.on.mongod_pebble_ready.emit(mock_container)
+
+        set_keyfile.assert_not_called()
+        mock_container.add_layer.assert_not_called()
+        mock_container.replan.assert_not_called()
+
+    @patch("charm.MongoDBCharm._set_keyfile")
+    def test_pebble_ready_container_cannot_connect(self, set_keyfile):
+        """Test verifies behavior when cannot connect to container in pebble ready function.
+
+        Verifies that when a failure to connect to container results in a deferral and that no
+        efforts to set keyFile or add/replan layers are made.
+        """
+        # presets
+        self.harness.set_leader(True)
+        mock_container = mock.Mock()
+        mock_container.return_value.can_connect.return_value = False
+        self.harness.charm.unit.get_container = mock_container
+
+        set_keyfile.assert_not_called()
+        mock_container.add_layer.assert_not_called()
+        mock_container.replan.assert_not_called()
+
+    @patch("charm.MongoDBCharm._set_keyfile")
+    def test_pebble_ready_set_keyfile_failure(self, set_keyfile):
+        """Test verifies behavior when setting keyfile fails.
+
+        Verifies that when a failure to set keyfile occurs that there is no attempt to add layers
+        or replan the container.
+        """
+        # presets
+        self.harness.set_leader(True)
+        mock_container = mock.Mock()
+        mock_container.return_value.can_connect.return_value = True
+        self.harness.charm.unit.get_container = mock_container
+
+        for exception in [PathError, ProtocolError]:
+            set_keyfile.side_effect = exception
+            mock_container.add_layer.assert_not_called()
+            mock_container.replan.assert_not_called()
+
     @patch("charm.MongoDBProvider")
     @patch("charm.MongoDBCharm._init_user")
     @patch("charm.MongoDBConnection")
@@ -85,13 +140,13 @@ class TestCharm(unittest.TestCase):
         with self.assertRaises(ModelError):
             self.harness.charm.on.start.emit()
 
-            # when cannot retrieve a container we should not set up the replica set or handle users
-            connection.return_value.__enter__.return_value.init_replset.assert_not_called()
-            init_user.assert_not_called()
-            provider.return_value.oversee_users.assert_not_called()
+        # when cannot retrieve a container we should not set up the replica set or handle users
+        connection.return_value.__enter__.return_value.init_replset.assert_not_called()
+        init_user.assert_not_called()
+        provider.return_value.oversee_users.assert_not_called()
 
-            # verify app data
-            self.assertEqual("db_initialised" in self.harness.charm.app_data, False)
+        # verify app data
+        self.assertEqual("db_initialised" in self.harness.charm.app_data, False)
 
     @patch("charm.MongoDBProvider")
     @patch("charm.MongoDBCharm._init_user")
@@ -163,13 +218,13 @@ class TestCharm(unittest.TestCase):
         with self.assertRaises(APIError):
             self.harness.charm.on.start.emit()
 
-            # when container does not exist we should not set up the replica set or handle users
-            connection.return_value.__enter__.return_value.init_replset.assert_not_called()
-            init_user.assert_not_called()
-            provider.return_value.oversee_users.assert_not_called()
+        # when container does not exist we should not set up the replica set or handle users
+        connection.return_value.__enter__.return_value.init_replset.assert_not_called()
+        init_user.assert_not_called()
+        provider.return_value.oversee_users.assert_not_called()
 
-            # verify app data
-            self.assertEqual("db_initialised" in self.harness.charm.app_data, False)
+        # verify app data
+        self.assertEqual("db_initialised" in self.harness.charm.app_data, False)
 
     @patch("charm.MongoDBProvider")
     @patch("charm.MongoDBCharm._init_user")
