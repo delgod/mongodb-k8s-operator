@@ -10,7 +10,7 @@ from ops.pebble import APIError, ExecError, PathError, ProtocolError
 from ops.testing import Harness
 from pymongo.errors import ConfigurationError, ConnectionFailure, OperationFailure
 
-from charm import MongoDBCharm
+from charm import MongoDBCharm, NotReadyError
 from tests.unit.helpers import patch_network_get
 
 PYMONGO_EXCEPTIONS = [
@@ -18,6 +18,7 @@ PYMONGO_EXCEPTIONS = [
     (ConfigurationError("error message"), ConfigurationError),
     (OperationFailure("error message"), OperationFailure),
 ]
+PEER_ADDR = {"private-address": "127.4.5.6"}
 
 
 class TestCharm(unittest.TestCase):
@@ -34,7 +35,8 @@ class TestCharm(unittest.TestCase):
         self.charm = self.harness.charm
         self.addCleanup(self.harness.cleanup)
 
-    def test_mongod_pebble_ready(self):
+    @patch("ops.framework.EventBase.defer")
+    def test_mongod_pebble_ready(self, defer):
         # Expected plan after Pebble ready with default config
         expected_plan = {
             "services": {
@@ -67,9 +69,11 @@ class TestCharm(unittest.TestCase):
         assert service.is_running()
         # Ensure we set an ActiveStatus with no message
         assert self.harness.model.unit.status == ActiveStatus()
+        defer.assert_not_called()
 
+    @patch("ops.framework.EventBase.defer")
     @patch("charm.MongoDBCharm._set_keyfile")
-    def test_pebble_ready_cannot_retrieve_container(self, set_keyfile):
+    def test_pebble_ready_cannot_retrieve_container(self, set_keyfile, defer):
         """Test verifies behavior when retrieving container results in ModelError in pebble ready.
 
         Verifies that when a failure to get a container occurs, that that failure is raised and
@@ -87,9 +91,11 @@ class TestCharm(unittest.TestCase):
         set_keyfile.assert_not_called()
         mock_container.add_layer.assert_not_called()
         mock_container.replan.assert_not_called()
+        defer.assert_not_called()
 
+    @patch("ops.framework.EventBase.defer")
     @patch("charm.MongoDBCharm._set_keyfile")
-    def test_pebble_ready_container_cannot_connect(self, set_keyfile):
+    def test_pebble_ready_container_cannot_connect(self, set_keyfile, defer):
         """Test verifies behavior when cannot connect to container in pebble ready function.
 
         Verifies that when a failure to connect to container results in a deferral and that no
@@ -101,12 +107,17 @@ class TestCharm(unittest.TestCase):
         mock_container.return_value.can_connect.return_value = False
         self.harness.charm.unit.get_container = mock_container
 
+        # Emit the PebbleReadyEvent carrying the mongod container
+        self.harness.charm.on.mongod_pebble_ready.emit(mock_container)
+
         set_keyfile.assert_not_called()
         mock_container.add_layer.assert_not_called()
         mock_container.replan.assert_not_called()
+        defer.assert_called()
 
+    @patch("ops.framework.EventBase.defer")
     @patch("charm.MongoDBCharm._set_keyfile")
-    def test_pebble_ready_set_keyfile_failure(self, set_keyfile):
+    def test_pebble_ready_set_keyfile_failure(self, set_keyfile, defer):
         """Test verifies behavior when setting keyfile fails.
 
         Verifies that when a failure to set keyfile occurs that there is no attempt to add layers
@@ -118,15 +129,20 @@ class TestCharm(unittest.TestCase):
         mock_container.return_value.can_connect.return_value = True
         self.harness.charm.unit.get_container = mock_container
 
-        for exception in [PathError, ProtocolError]:
+        for exception in [PathError("kind", "message"), ProtocolError("kind", "message")]:
             set_keyfile.side_effect = exception
+
+            # Emit the PebbleReadyEvent carrying the mongod container
+            self.harness.charm.on.mongod_pebble_ready.emit(mock_container)
             mock_container.add_layer.assert_not_called()
             mock_container.replan.assert_not_called()
+            defer.assert_called()
 
+    @patch("ops.framework.EventBase.defer")
     @patch("charm.MongoDBProvider")
     @patch("charm.MongoDBCharm._init_user")
     @patch("charm.MongoDBConnection")
-    def test_start_cannot_retrieve_container(self, connection, init_user, provider):
+    def test_start_cannot_retrieve_container(self, connection, init_user, provider, defer):
         """Verifies that failures to get container result in a ModelError being raised.
 
         Further this function verifies that on error no attempts to set up the replica set or
@@ -147,11 +163,13 @@ class TestCharm(unittest.TestCase):
 
         # verify app data
         self.assertEqual("db_initialised" in self.harness.charm.app_data, False)
+        defer.assert_not_called()
 
+    @patch("ops.framework.EventBase.defer")
     @patch("charm.MongoDBProvider")
     @patch("charm.MongoDBCharm._init_user")
     @patch("charm.MongoDBConnection")
-    def test_start_container_cannot_connect(self, connection, init_user, provider):
+    def test_start_container_cannot_connect(self, connection, init_user, provider, defer):
         """Tests inability to connect results in deferral.
 
         Verifies that if connection is not possible, that there are no attempts to set up the
@@ -172,11 +190,13 @@ class TestCharm(unittest.TestCase):
 
         # verify app data
         self.assertEqual("db_initialised" in self.harness.charm.app_data, False)
+        defer.assert_called()
 
+    @patch("ops.framework.EventBase.defer")
     @patch("charm.MongoDBProvider")
     @patch("charm.MongoDBCharm._init_user")
     @patch("charm.MongoDBConnection")
-    def test_start_container_does_not_exist(self, connection, init_user, provider):
+    def test_start_container_does_not_exist(self, connection, init_user, provider, defer):
         """Tests lack of existence of files on container results in deferral.
 
         Verifies that if files do not exists, that there are no attempts to set up the replica set
@@ -198,11 +218,13 @@ class TestCharm(unittest.TestCase):
 
         # verify app data
         self.assertEqual("db_initialised" in self.harness.charm.app_data, False)
+        defer.assert_called()
 
+    @patch("ops.framework.EventBase.defer")
     @patch("charm.MongoDBProvider")
     @patch("charm.MongoDBCharm._init_user")
     @patch("charm.MongoDBConnection")
-    def test_start_container_exists_fails(self, connection, init_user, provider):
+    def test_start_container_exists_fails(self, connection, init_user, provider, defer):
         """Tests failure in checking file existence on container raises an APIError.
 
         Verifies that when checking container files raises an API Error, we raise that same error
@@ -225,11 +247,13 @@ class TestCharm(unittest.TestCase):
 
         # verify app data
         self.assertEqual("db_initialised" in self.harness.charm.app_data, False)
+        defer.assert_not_called()
 
+    @patch("ops.framework.EventBase.defer")
     @patch("charm.MongoDBProvider")
     @patch("charm.MongoDBCharm._init_user")
     @patch("charm.MongoDBConnection")
-    def test_start_already_initialised(self, connection, init_user, provider):
+    def test_start_already_initialised(self, connection, init_user, provider, defer):
         """Tests that if the replica set has already been set up that we return.
 
         Verifies that if the replica set is already set up that no attempts to set it up again are
@@ -252,11 +276,13 @@ class TestCharm(unittest.TestCase):
         connection.return_value.__enter__.return_value.init_replset.assert_not_called()
         init_user.assert_not_called()
         provider.return_value.oversee_users.assert_not_called()
+        defer.assert_not_called()
 
+    @patch("ops.framework.EventBase.defer")
     @patch("charm.MongoDBProvider")
     @patch("charm.MongoDBCharm._init_user")
     @patch("charm.MongoDBConnection")
-    def test_start_mongod_not_ready(self, connection, init_user, provider):
+    def test_start_mongod_not_ready(self, connection, init_user, provider, defer):
         """Tests that if mongod is not ready that we defer and return.
 
         Verifies that if mongod is not ready that no attempts to set up the replica set and set up
@@ -281,11 +307,15 @@ class TestCharm(unittest.TestCase):
 
         # verify app data
         self.assertEqual("db_initialised" in self.harness.charm.app_data, False)
+        defer.assert_called()
 
+    @patch("ops.framework.EventBase.defer")
     @patch("charm.MongoDBProvider")
     @patch("charm.MongoDBCharm._init_user")
     @patch("charm.MongoDBConnection")
-    def test_start_mongod_error_initalising_replica_set(self, connection, init_user, provider):
+    def test_start_mongod_error_initalising_replica_set(
+        self, connection, init_user, provider, defer
+    ):
         """Tests that failure to initialise replica set is properly handled.
 
         Verifies that when there is a failure to initialise replica set that no operations related
@@ -309,11 +339,13 @@ class TestCharm(unittest.TestCase):
 
             # verify app data
             self.assertEqual("db_initialised" in self.harness.charm.app_data, False)
+            defer.assert_called()
 
+    @patch("ops.framework.EventBase.defer")
     @patch("charm.MongoDBProvider")
     @patch("charm.MongoDBCharm._init_user")
     @patch("charm.MongoDBConnection")
-    def test_start_mongod_error_initalising_user(self, connection, init_user, provider):
+    def test_start_mongod_error_initalising_user(self, connection, init_user, provider, defer):
         """Tests that failure to initialise users set is properly handled.
 
         Verifies that when there is a failure to initialise users that overseeing users is not
@@ -332,14 +364,16 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.start.emit()
 
         provider.return_value.oversee_users.assert_not_called()
+        defer.assert_called()
 
         # verify app data
         self.assertEqual("db_initialised" in self.harness.charm.app_data, False)
 
+    @patch("ops.framework.EventBase.defer")
     @patch("charm.MongoDBProvider")
     @patch("charm.MongoDBCharm._init_user")
     @patch("charm.MongoDBConnection")
-    def test_start_mongod_error_overseeing_users(self, connection, init_user, provider):
+    def test_start_mongod_error_overseeing_users(self, connection, init_user, provider, defer):
         """Tests failures related to pymongo are properly handled when overseeing users.
 
         Verifies that when there is a failure to oversee users that we defer and do not set the
@@ -359,6 +393,172 @@ class TestCharm(unittest.TestCase):
             self.harness.charm.on.start.emit()
 
             provider.return_value.oversee_users.assert_not_called()
+            defer.assert_called()
 
             # verify app data
             self.assertEqual("db_initialised" in self.harness.charm.app_data, False)
+
+    @patch("ops.framework.EventBase.defer")
+    @patch("charm.MongoDBConnection")
+    def test_reconfigure_not_already_initialised(self, connection, defer):
+        """Tests reconfigure does not execute when database has not been initialised.
+
+        Verifies in case of relation_joined and relation departed, that when the the database has
+        not yet been initialised that no attempts to remove/add units are made.
+        """
+        # presets
+        self.harness.set_leader(True)
+        rel = self.harness.charm.model.get_relation("database-peers")
+
+        # test both relation events
+        for departed in [False, True]:
+            if departed:
+                # departed presets
+                connection.return_value.__enter__.return_value.get_replset_members.return_value = {
+                    "mongodb-k8s-0.mongodb-k8s-endpoints",
+                    "mongodb-k8s-1.mongodb-k8s-endpoints",
+                }
+
+                # simulate removing 2nd MongoDB unit
+                self.harness.remove_relation_unit(rel.id, "mongodb/1")
+            else:
+                # joining presets
+                connection.return_value.__enter__.return_value.get_replset_members.return_value = {
+                    "mongodb-k8s-0.mongodb-k8s-endpoints"
+                }
+
+                # simulate 2nd MongoDB unit joining
+                self.harness.add_relation_unit(rel.id, "mongodb/1")
+                self.harness.update_relation_data(rel.id, "mongodb/1", PEER_ADDR)
+
+            if departed:
+                connection.return_value.__enter__.return_value.add_replset_member.assert_not_called()
+            else:
+                connection.return_value.__enter__.return_value.remove_replset_member.assert_not_called()
+
+            defer.assert_not_called()
+
+    @patch("ops.framework.EventBase.defer")
+    @patch("charm.MongoDBConnection")
+    @patch("lib.charms.mongodb_libs.v0.mongodb.MongoClient")
+    def test_reconfigure_get_members_failure(self, client, connection, defer):
+        """Tests reconfigure does not execute when unable to get the replica set members.
+
+        Verifies in case of relation_joined and relation departed, that when the the database
+        cannot retrieve the replica set members that no attempts to remove/add units are made and
+        that the the event is deferred.
+        """
+        # presets
+        self.harness.set_leader(True)
+        self.harness.charm.app_data["db_initialised"] = "True"
+        rel = self.harness.charm.model.get_relation("database-peers")
+
+        for exception, _ in PYMONGO_EXCEPTIONS:
+            connection.return_value.__enter__.return_value.get_replset_members.side_effect = (
+                exception
+            )
+
+            # test both relation events
+            for departed in [False, True]:
+                if departed:
+                    # simulate removing 2nd MongoDB unit
+                    self.harness.remove_relation_unit(rel.id, "mongodb/1")
+                else:
+                    # simulate 2nd MongoDB unit joining
+                    self.harness.add_relation_unit(rel.id, "mongodb/1")
+                    self.harness.update_relation_data(rel.id, "mongodb/1", PEER_ADDR)
+
+                if departed:
+                    connection.return_value.__enter__.return_value.add_replset_member.assert_not_called()
+                else:
+                    connection.return_value.__enter__.return_value.remove_replset_member.assert_not_called()
+
+                defer.assert_called()
+
+    @patch("ops.framework.EventBase.defer")
+    @patch("charm.MongoDBConnection")
+    def test_reconfigure_remove_member_failure(self, connection, defer):
+        """Tests reconfigure does not proceed when unable to remove a member.
+
+        Verifies in relation departed events, that when the database cannot remove a member that
+        the event is deferred.
+        """
+        # presets
+        self.harness.set_leader(True)
+        self.harness.charm.app_data["db_initialised"] = "True"
+        connection.return_value.__enter__.return_value.get_replset_members.return_value = {
+            "mongodb-k8s-0.mongodb-k8s-endpoints",
+            "mongodb-k8s-1.mongodb-k8s-endpoints",
+        }
+        rel = self.harness.charm.model.get_relation("database-peers")
+
+        exceptions = PYMONGO_EXCEPTIONS
+        exceptions.append((NotReadyError, None))
+        for exception, _ in exceptions:
+            connection.return_value.__enter__.return_value.remove_replset_member.side_effect = (
+                exception
+            )
+
+            # simulate 2nd MongoDB unit joining( need a unit to join before removing a unit)
+            self.harness.add_relation_unit(rel.id, "mongodb/1")
+            self.harness.update_relation_data(rel.id, "mongodb/1", PEER_ADDR)
+
+            # simulate removing 2nd MongoDB unit
+            self.harness.remove_relation_unit(rel.id, "mongodb/1")
+
+            connection.return_value.__enter__.return_value.remove_replset_member.assert_called()
+            defer.assert_called()
+
+    @patch("ops.framework.EventBase.defer")
+    @patch("charm.MongoDBConnection")
+    def test_reconfigure_peer_not_ready(self, connection, defer):
+        """Tests reconfigure does not proceed when the adding member is not ready.
+
+        Verifies in relation joined events, that when the adding member is not ready that the event
+        is deferred.
+        """
+        # presets
+        self.harness.set_leader(True)
+        self.harness.charm.app_data["db_initialised"] = "True"
+        connection.return_value.__enter__.return_value.get_replset_members.return_value = {
+            "mongodb-k8s-0.mongodb-k8s-endpoints"
+        }
+        connection.return_value.__enter__.return_value.is_ready = False
+
+        # simulate 2nd MongoDB unit joining( need a unit to join before removing a unit)
+        rel = self.harness.charm.model.get_relation("database-peers")
+        self.harness.add_relation_unit(rel.id, "mongodb/1")
+        self.harness.update_relation_data(rel.id, "mongodb/1", PEER_ADDR)
+
+        connection.return_value.__enter__.return_value.add_replset_member.assert_not_called()
+        defer.assert_called()
+
+    @patch("ops.framework.EventBase.defer")
+    @patch("charm.MongoDBConnection")
+    def test_reconfigure_add_member_failure(self, connection, defer):
+        """Tests reconfigure does not proceed when unable to add a member.
+
+        Verifies in relation joined events, that when the database cannot add a member that the
+        event is deferred.
+        """
+        # presets
+        self.harness.set_leader(True)
+        self.harness.charm.app_data["db_initialised"] = "True"
+        connection.return_value.__enter__.return_value.get_replset_members.return_value = {
+            "mongodb-k8s-0.mongodb-k8s-endpoints"
+        }
+        rel = self.harness.charm.model.get_relation("database-peers")
+
+        exceptions = PYMONGO_EXCEPTIONS
+        exceptions.append((NotReadyError, None))
+        for exception, _ in exceptions:
+            connection.return_value.__enter__.return_value.add_replset_member.side_effect = (
+                exception
+            )
+
+            # simulate 2nd MongoDB unit joining( need a unit to join before removing a unit)
+            self.harness.add_relation_unit(rel.id, "mongodb/1")
+            self.harness.update_relation_data(rel.id, "mongodb/1", PEER_ADDR)
+
+            connection.return_value.__enter__.return_value.add_replset_member.assert_called()
+            defer.assert_called()
