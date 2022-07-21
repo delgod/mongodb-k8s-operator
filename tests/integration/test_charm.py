@@ -347,9 +347,9 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
 
     logger.info(f'OLD: {k8s_volume_id} vs New: {new_k8s_volume_id}')
 
-    assert k8s_volume_id != new_k8s_volume_id
+    assert k8s_volume_id == new_k8s_volume_id
 
-    # check if the old data is there
+    # check if the old data is still there
     latest_secondary_mongo_uri = await mongodb_uri(ops_test, [int(new_unit_id)])
     try:
         await check_if_test_documents_stored(
