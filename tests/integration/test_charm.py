@@ -14,6 +14,7 @@ from helpers import (
     check_if_test_documents_stored,
     generate_collection_id,
     get_address_of_unit,
+    get_latest_unit_id,
     get_leader_id,
     mongodb_uri,
     primary_host,
@@ -293,6 +294,7 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME], status="active", timeout=1000, wait_for_exact_units=4
     )
+
     num_units = len(ops_test.model.applications[APP_NAME].units)
     assert num_units == 4
 
@@ -310,7 +312,7 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     # query the secondaries by targeting units
     # choosing the 3rd unit, going with the assumption that juju downscales
     # from the higher unit downwards
-    latest_secondary_mongo_uri = await mongodb_uri(ops_test, [3])
+    latest_secondary_mongo_uri = await mongodb_uri(ops_test, [get_latest_unit_id(ops_test)])
     await check_if_test_documents_stored(
         ops_test, collection_id, mongo_uri=latest_secondary_mongo_uri
     )
@@ -318,7 +320,8 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     # get k8s_volume_id of the unit with ID: 3
     storage_resp = await ops_test.juju("list-storage", "--format=json")
     storage = json.loads(storage_resp[1])
-    k8s_volume_id = storage["volumes"]["3"]["provider-id"]
+    latest_unit_id = str(get_latest_unit_id(ops_test))
+    k8s_volume_id = storage["volumes"][latest_unit_id]["provider-id"]
 
     # scale down
     await ops_test.model.applications[APP_NAME].scale(scale_change=-1)
@@ -340,13 +343,13 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     storage_resp = await ops_test.juju("list-storage", "--format=json")
     storage = json.loads(storage_resp[1])
 
-    new_unit_id = max(storage["volumes"].keys())
-    new_k8s_volume_id = storage["volumes"][new_unit_id]["provider-id"]
+    latest_unit_id = str(get_latest_unit_id(ops_test))
+    new_k8s_volume_id = storage["volumes"][latest_unit_id]["provider-id"]
 
     assert k8s_volume_id == new_k8s_volume_id
 
     # check if the old data is still there
-    latest_secondary_mongo_uri = await mongodb_uri(ops_test, [int(new_unit_id)])
+    latest_secondary_mongo_uri = await mongodb_uri(ops_test, [get_latest_unit_id(ops_test)])
     await check_if_test_documents_stored(
         ops_test, collection_id, mongo_uri=latest_secondary_mongo_uri
     )

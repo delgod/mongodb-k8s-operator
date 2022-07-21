@@ -209,3 +209,11 @@ async def secondary_mongo_uris_with_sync_delay(ops_test: OpsTest, rs_status_data
 def generate_collection_id() -> str:
     new_id = "".join(choices(ascii_lowercase + digits, k=4)).replace("_", "")
     return f"collection_{new_id}"
+
+
+def get_latest_unit_id(ops_test: OpsTest) -> int:
+    units = ops_test.model.applications[APP_NAME].units
+
+    unit_ids = [unit.name.split("/")[-1] for unit in units]
+
+    return int(max(unit_ids))
