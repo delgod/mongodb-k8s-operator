@@ -91,7 +91,7 @@ async def test_application_primary(ops_test: OpsTest):
     ), "primary not leader on deployment"
 
 
-'''async def test_scale_up(ops_test: OpsTest):
+async def test_scale_up(ops_test: OpsTest):
     """Tests juju add-unit functionality.
 
     Verifies that when a new unit is added to the MongoDB application that it is added to the
@@ -270,7 +270,7 @@ async def test_replication_data_consistency(ops_test: OpsTest):
     logger.info(
         f"{synced_secondaries_count}/{len(secondaries)} secondaries fully synced with primary."
     )
-    assert synced_secondaries_count > 0'''
+    assert synced_secondaries_count > 0
 
 
 async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
@@ -318,7 +318,6 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     # get k8s_volume_id of the unit with ID: 3
     storage_resp = await ops_test.juju("list-storage", "--format=json")
     storage = json.loads(storage_resp[1])
-    logger.info(f"Storage after scaling up by 1: \n{storage['volumes']}")
     k8s_volume_id = storage["volumes"]["3"]["provider-id"]
 
     # scale down
@@ -341,20 +340,13 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     storage_resp = await ops_test.juju("list-storage", "--format=json")
     storage = json.loads(storage_resp[1])
 
-    logger.info(f"Storage after scaling back up: \n{storage['volumes']}")
     new_unit_id = max(storage["volumes"].keys())
     new_k8s_volume_id = storage["volumes"][new_unit_id]["provider-id"]
-
-    logger.info(f'OLD: {k8s_volume_id} vs New: {new_k8s_volume_id}')
 
     assert k8s_volume_id == new_k8s_volume_id
 
     # check if the old data is still there
     latest_secondary_mongo_uri = await mongodb_uri(ops_test, [int(new_unit_id)])
-    try:
-        await check_if_test_documents_stored(
-            ops_test, collection_id, mongo_uri=latest_secondary_mongo_uri
-        )
-    except AssertionError:
-        logger.info("Old volume not reused and no data transferred.")
-        assert True
+    await check_if_test_documents_stored(
+        ops_test, collection_id, mongo_uri=latest_secondary_mongo_uri
+    )
