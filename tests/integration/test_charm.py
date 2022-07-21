@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
-
+import json
 import logging
 import time
 
@@ -316,7 +316,8 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     )
 
     # get k8s_volume_id of the unit with ID: 3
-    storage = await ops_test.juju("list-storage", "--format=json")
+    storage_resp = await ops_test.juju("list-storage", "--format=json")
+    storage = json.loads(storage_resp[1])
     k8s_volume_id = storage["volumes"]["3"]["provider-id"]
 
     # scale down
@@ -336,7 +337,8 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     assert num_units == 4
 
     # check if k8s is reusing the previous volume from before scale down
-    storage = await ops_test.juju("list-storage", "--format=json")
+    storage_resp = await ops_test.juju("list-storage", "--format=json")
+    storage = json.loads(storage_resp[1])
     new_k8s_volume_id = storage["volumes"]["3"]["provider-id"]
 
     assert k8s_volume_id != new_k8s_volume_id
@@ -349,3 +351,4 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
         )
     except AssertionError:
         logger.info("Old volume not reused and no data transferred.")
+        assert True
