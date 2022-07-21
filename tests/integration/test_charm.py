@@ -318,7 +318,7 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     # get k8s_volume_id of the unit with ID: 3
     storage_resp = await ops_test.juju("list-storage", "--format=json")
     storage = json.loads(storage_resp[1])
-    logger.info(f"Storage after scaling up 1: \n{storage['volumes']}")
+    logger.info(f"Storage after scaling up by 1: \n{storage['volumes']}")
     k8s_volume_id = storage["volumes"]["3"]["provider-id"]
 
     # scale down
@@ -340,15 +340,17 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     # check if k8s is reusing the previous volume from before scale down
     storage_resp = await ops_test.juju("list-storage", "--format=json")
     storage = json.loads(storage_resp[1])
-    logger.info(f"Storage after scaling down 1: \n{storage['volumes']}")
-    new_k8s_volume_id = storage["volumes"]["3"]["provider-id"]
 
-    logger.info(new_k8s_volume_id)
+    logger.info(f"Storage after scaling back up: \n{storage['volumes']}")
+    new_unit_id = max(storage["volumes"].keys())
+    new_k8s_volume_id = storage["volumes"][new_unit_id]["provider-id"]
+
+    logger.info(f'OLD: {k8s_volume_id} vs New: {new_k8s_volume_id}')
 
     assert k8s_volume_id != new_k8s_volume_id
 
     # check if the old data is there
-    latest_secondary_mongo_uri = await mongodb_uri(ops_test, [3])
+    latest_secondary_mongo_uri = await mongodb_uri(ops_test, [int(new_unit_id)])
     try:
         await check_if_test_documents_stored(
             ops_test, collection_id, mongo_uri=latest_secondary_mongo_uri
