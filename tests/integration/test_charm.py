@@ -91,7 +91,7 @@ async def test_application_primary(ops_test: OpsTest):
     ), "primary not leader on deployment"
 
 
-async def test_scale_up(ops_test: OpsTest):
+'''async def test_scale_up(ops_test: OpsTest):
     """Tests juju add-unit functionality.
 
     Verifies that when a new unit is added to the MongoDB application that it is added to the
@@ -270,7 +270,7 @@ async def test_replication_data_consistency(ops_test: OpsTest):
     logger.info(
         f"{synced_secondaries_count}/{len(secondaries)} secondaries fully synced with primary."
     )
-    assert synced_secondaries_count > 0
+    assert synced_secondaries_count > 0'''
 
 
 async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
@@ -318,12 +318,13 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     # get k8s_volume_id of the unit with ID: 3
     storage_resp = await ops_test.juju("list-storage", "--format=json")
     storage = json.loads(storage_resp[1])
+    logger.info(f"Storage after scaling up 1: \n{storage['volumes']}")
     k8s_volume_id = storage["volumes"]["3"]["provider-id"]
 
     # scale down
     await ops_test.model.applications[APP_NAME].scale(scale_change=-1)
     await ops_test.model.wait_for_idle(
-        apps=[APP_NAME], status="active", timeout=1000, wait_for_exact_units=3
+        apps=[APP_NAME], status="active", timeout=3000, wait_for_exact_units=3
     )
     num_units = len(ops_test.model.applications[APP_NAME].units)
     assert num_units == 3
@@ -331,7 +332,7 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     # scale back up by 1 unit
     await ops_test.model.applications[APP_NAME].scale(scale_change=1)
     await ops_test.model.wait_for_idle(
-        apps=[APP_NAME], status="active", timeout=1000, wait_for_exact_units=4
+        apps=[APP_NAME], status="active", timeout=3000, wait_for_exact_units=4
     )
     num_units = len(ops_test.model.applications[APP_NAME].units)
     assert num_units == 4
@@ -339,7 +340,10 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     # check if k8s is reusing the previous volume from before scale down
     storage_resp = await ops_test.juju("list-storage", "--format=json")
     storage = json.loads(storage_resp[1])
+    logger.info(f"Storage after scaling down 1: \n{storage['volumes']}")
     new_k8s_volume_id = storage["volumes"]["3"]["provider-id"]
+
+    logger.info(new_k8s_volume_id)
 
     assert k8s_volume_id != new_k8s_volume_id
 
