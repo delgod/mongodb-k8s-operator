@@ -181,6 +181,11 @@ async def check_if_test_documents_stored(
 
 
 async def secondary_mongo_uris_with_sync_delay(ops_test: OpsTest, rs_status_data):
+    """Returns the list of secondaries and their sync delay with the master.
+
+    Returns the ascending list of Secondaries, the first secondary is the
+    one with the lowest data sync delay.
+    """
     primary_optime_date = [
         datetime.strptime(member["optimeDate"], "%Y-%m-%dT%H:%M:%S.%fZ")
         for member in rs_status_data["members"]
@@ -207,6 +212,7 @@ async def secondary_mongo_uris_with_sync_delay(ops_test: OpsTest, rs_status_data
 
 
 def generate_collection_id() -> str:
+    """Generates a short and random Mongodb collection id."""
     new_id = "".join(choices(ascii_lowercase + digits, k=4)).replace("_", "")
     return f"collection_{new_id}"
 
@@ -220,6 +226,15 @@ def get_latest_unit_id(ops_test: OpsTest) -> int:
 
 
 async def get_current_storage_info(ops_test: OpsTest) -> SimpleNamespace:
+    """Returns the info of the storage state of the latest juju unit.
+
+    Returns:
+        SimpleNamespace(
+            unit_id=latest_juju_unit_id,
+            k8s_volume_id=corresponding K8s pvc id
+        )
+    """
+
     def get_unit_volume_ids(full_storage_obj) -> dict:
         result = {}
         for key, val in full_storage_obj.items():
@@ -230,7 +245,7 @@ async def get_current_storage_info(ops_test: OpsTest) -> SimpleNamespace:
                 if unit_body.get("life", None) != "alive":
                     continue
 
-                result[unit_name] = key
+                result[unit_name.split('/')[-1]] = val["provider-id"]
                 break
 
         return result
@@ -238,11 +253,11 @@ async def get_current_storage_info(ops_test: OpsTest) -> SimpleNamespace:
     storage_resp = await ops_test.juju("list-storage", "--format=json")
     storage = json.loads(storage_resp[1])
 
-    juju_units_storage_map = get_unit_volume_ids(storage)
+    juju_units_storage_map = get_unit_volume_ids(storage["volumes"])
 
     latest_juju_unit_id = get_latest_unit_id(ops_test)
 
     return SimpleNamespace(
         unit_id=latest_juju_unit_id,
-        k8s_volume_id=juju_units_storage_map[str(latest_juju_unit_id)]["provider-id"],
+        k8s_volume_id=juju_units_storage_map[str(latest_juju_unit_id)],
     )
