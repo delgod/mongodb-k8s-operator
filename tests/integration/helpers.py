@@ -201,7 +201,6 @@ async def secondary_mongo_uris_with_sync_delay(ops_test: OpsTest, rs_status_data
         member_optime_date = datetime.strptime(member["optimeDate"], "%Y-%m-%dT%H:%M:%S.%fZ")
 
         host = await mongodb_uri(ops_test, [unit_id])
-
         delay_seconds = (primary_optime_date - member_optime_date).total_seconds()
 
         secondaries.append({"uri": host, "delay": math.fabs(delay_seconds)})
