@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
-import json
 import logging
 import time
 
@@ -14,6 +13,7 @@ from helpers import (
     check_if_test_documents_stored,
     generate_collection_id,
     get_address_of_unit,
+    get_current_storage_info,
     get_latest_unit_id,
     get_leader_id,
     mongodb_uri,
@@ -317,11 +317,8 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
         ops_test, collection_id, mongo_uri=latest_secondary_mongo_uri
     )
 
-    # get k8s_volume_id of the unit with ID: 3
-    storage_resp = await ops_test.juju("list-storage", "--format=json")
-    storage = json.loads(storage_resp[1])
-    latest_unit_id = str(get_latest_unit_id(ops_test))
-    k8s_volume_id = storage["volumes"][latest_unit_id]["provider-id"]
+    # get k8s_volume_id of the latest added unit
+    storage_info = await get_current_storage_info(ops_test)
 
     # scale down
     await ops_test.model.applications[APP_NAME].scale(scale_change=-1)
@@ -340,16 +337,13 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
     assert num_units == 4
 
     # check if k8s is reusing the previous volume from before scale down
-    storage_resp = await ops_test.juju("list-storage", "--format=json")
-    storage = json.loads(storage_resp[1])
+    # get k8s_volume_id of the latest added unit
+    new_storage_info = await get_current_storage_info(ops_test)
 
-    latest_unit_id = str(get_latest_unit_id(ops_test))
-    new_k8s_volume_id = storage["volumes"][latest_unit_id]["provider-id"]
-
-    assert k8s_volume_id == new_k8s_volume_id
+    assert storage_info.k8s_volume_id == new_storage_info.k8s_volume_id
 
     # check if the old data is still there
-    latest_secondary_mongo_uri = await mongodb_uri(ops_test, [get_latest_unit_id(ops_test)])
+    latest_secondary_mongo_uri = await mongodb_uri(ops_test, [new_storage_info.unit_id])
     await check_if_test_documents_stored(
         ops_test, collection_id, mongo_uri=latest_secondary_mongo_uri
     )

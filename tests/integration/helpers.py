@@ -217,3 +217,32 @@ def get_latest_unit_id(ops_test: OpsTest) -> int:
     unit_ids = [unit.name.split("/")[-1] for unit in units]
 
     return int(max(unit_ids))
+
+
+async def get_current_storage_info(ops_test: OpsTest) -> SimpleNamespace:
+    def get_unit_volume_ids(full_storage_obj) -> dict:
+        result = {}
+        for key, val in full_storage_obj.items():
+            if val["status"]["current"] != "attached":
+                continue
+
+            for unit_name, unit_body in val["attachments"]["units"].items():
+                if unit_body.get("life", None) != "alive":
+                    continue
+
+                result[unit_name] = key
+                break
+
+        return result
+
+    storage_resp = await ops_test.juju("list-storage", "--format=json")
+    storage = json.loads(storage_resp[1])
+
+    juju_units_storage_map = get_unit_volume_ids(storage)
+
+    latest_juju_unit_id = get_latest_unit_id(ops_test)
+
+    return SimpleNamespace(
+        unit_id=latest_juju_unit_id,
+        k8s_volume_id=juju_units_storage_map[str(latest_juju_unit_id)]["provider-id"],
+    )
