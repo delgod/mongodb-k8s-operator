@@ -6,7 +6,7 @@ import logging
 import math
 from datetime import datetime
 from pathlib import Path
-from random import choices
+from random import choices, seed
 from string import ascii_lowercase, digits
 from types import SimpleNamespace
 from typing import List, Optional
@@ -213,7 +213,10 @@ async def secondary_mongo_uris_with_sync_delay(ops_test: OpsTest, rs_status_data
 
 def generate_collection_id() -> str:
     """Generates a short and random Mongodb collection id."""
-    new_id = "".join(choices(ascii_lowercase + digits, k=4)).replace("_", "")
+    # force updating the seed to the current time
+    seed(datetime.now())
+
+    new_id = "".join(choices(ascii_lowercase + digits, k=4))
     return f"collection_{new_id}"
 
 
@@ -245,7 +248,7 @@ async def get_current_storage_info(ops_test: OpsTest) -> SimpleNamespace:
                 if unit_body.get("life", None) != "alive":
                     continue
 
-                result[unit_name.split('/')[-1]] = val["provider-id"]
+                result[unit_name.split("/")[-1]] = val["provider-id"]
                 break
 
         return result
