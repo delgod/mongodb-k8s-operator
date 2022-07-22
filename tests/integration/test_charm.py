@@ -226,6 +226,8 @@ async def test_replication_data_consistency(ops_test: OpsTest):
     assert insert_many_docs.succeeded and len(insert_many_docs.data["insertedIds"]) == 2
 
     # attempt ensuring that the replication happened on all secondaries
+    # 24sec is an arbitrary number that worked well locally in a couple of tests
+    # 12 sec being the median time for primary reelection, so I randomly chose a factor
     time.sleep(24)
 
     # query the primary only
@@ -238,7 +240,7 @@ async def test_replication_data_consistency(ops_test: OpsTest):
     assert set_primary_read_pref.succeeded
     await check_if_test_documents_stored(ops_test, collection_id)
 
-    # query the secondaries with the pymongo default behavior: majority
+    # query only from the secondaries
     set_secondary_read_pref = await run_mongo_op(
         ops_test,
         'db.getMongo().setReadPref("secondary")',
@@ -252,6 +254,9 @@ async def test_replication_data_consistency(ops_test: OpsTest):
     rs_status = await run_mongo_op(ops_test, "rs.status()")
     assert rs_status.succeeded, "mongod had no response for 'rs.status()'"
 
+    # get the secondaries ordered ASC by the least amount of data sync delay
+    # compared to the primary, so that we can attempt to delay the documents
+    # query until after the said delay is elapsed (using time.sleep)
     secondaries = await secondary_mongo_uris_with_sync_delay(ops_test, rs_status.data)
 
     # verify that each secondary contains the data

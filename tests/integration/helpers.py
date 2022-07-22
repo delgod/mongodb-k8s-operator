@@ -126,13 +126,13 @@ async def run_mongo_op(
     if expecting_output:
         try:
             output.data = json.loads(stdout)
-        except Exception as e:
-            raise e
+        except Exception:
+            raise
 
     return output
 
 
-def primary_host(rs_status_data) -> Optional[str]:
+def primary_host(rs_status_data: dict) -> Optional[str]:
     """Returns the primary host in the replica set or None if none was elected."""
     primary_list = [
         member["name"]
