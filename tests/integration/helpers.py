@@ -82,7 +82,7 @@ async def mongodb_uri(ops_test: OpsTest, unit_ids: List[int] = None) -> str:
 
 
 # useful, as sometimes, the mongo request returns nothing on the first try
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(3))
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(3), reraise=True)
 async def run_mongo_op(
     ops_test: OpsTest,
     mongo_op: str,
@@ -127,6 +127,12 @@ async def run_mongo_op(
         try:
             output.data = json.loads(stdout)
         except Exception:
+            logger.error(
+                "Could not serialize the output into json.{}{}".format(
+                    f"\n\tOut: {stdout}" if stdout else "",
+                    f"\n\tErr: {stderr}" if stderr else "",
+                )
+            )
             raise
 
     return output

@@ -18,10 +18,10 @@ repository = "TODO"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-
 ops = "^1.2"
 pymongo = "^4.0"
 tenacity = "^8.0.1"
+jsonschema = "^4.7.2"
 
 [tool.poetry.dev-dependencies]
 coverage = {extras = ["toml"], version = "^6.3.2"}
@@ -36,9 +36,9 @@ flake8-builtins = "^1.5.3"
 pep8-naming = "^0.12.1"
 codespell = "^2.1.0"
 juju = "^2.9.8"
-pymongo = "^4.1.0"
 pytest-operator = "^0.14.0"
 lightkube = "^0.10.2"
+pytest-asyncio = "0.18.3"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
