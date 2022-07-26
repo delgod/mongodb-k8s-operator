@@ -358,14 +358,8 @@ async def test_replication_data_persistence_after_scaling(ops_test: OpsTest):
         f"New PVC id: {new_storage_info.k8s_volume_id}"
     )
 
-    # The following is not really useful as we do not try to assert anything
+    # The following cannot be asserted for sure, no guarantees of behavior
     # assert storage_info.k8s_volume_id == new_storage_info.k8s_volume_id
-
-    # check if the old data is still there
-    # latest_secondary_mongo_uri = await mongodb_uri(ops_test, [new_storage_info.unit_id])
-    # await check_if_test_documents_stored(
-    #    ops_test, collection_id, mongo_uri=latest_secondary_mongo_uri
-    # )
 
     # remove the collection
     await run_mongo_op(
