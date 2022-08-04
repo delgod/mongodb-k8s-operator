@@ -1,8 +1,2 @@
 get-admin-password:
-  description: Get the admin user password used by charm.
-set-admin-password:
-  description: Change the admin user password used by charm.
-  params:
-    password:
-      type: string
-      description: The password will be auto-generated if this option is not specified.
+  description: Get the admin user password for the database.
