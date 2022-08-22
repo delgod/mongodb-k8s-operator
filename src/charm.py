@@ -342,7 +342,9 @@ class MongoDBCharm(CharmBase):
         if "username" in event.params:
             username = event.params["username"]
         if username not in CHARM_USERS:
-            event.fail(f"The action can be run only for users used by the charm: {CHARM_USERS} not {username}")
+            event.fail(
+                f"The action can be run only for users used by the charm: {CHARM_USERS} not {username}"
+            )
             return
         event.set_results(
             {f"{username}-password": self._get_secret("app", f"{username}_password")}
@@ -359,7 +361,9 @@ class MongoDBCharm(CharmBase):
         if "username" in event.params:
             username = event.params["username"]
         if username not in CHARM_USERS:
-            event.fail(f"The action can be run only for users used by the charm: {CHARM_USERS} not {username}.")
+            event.fail(
+                f"The action can be run only for users used by the charm: {CHARM_USERS} not {username}."
+            )
             return
 
         new_password = generate_password()
