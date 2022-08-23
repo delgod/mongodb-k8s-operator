@@ -370,6 +370,11 @@ class MongoDBCharm(CharmBase):
         if "password" in event.params:
             new_password = event.params["password"]
 
+        if new_password == self._get_secret("app", f"{username}_password"):
+            event.log("The old and new passwords are equal.")
+            event.set_results({f"{username}-password": new_password})
+            return
+
         with MongoDBConnection(self.mongodb_config) as mongo:
             try:
                 mongo.set_user_password(username, new_password)
