@@ -130,6 +130,8 @@ class MongoDBProvider(Object):
             password=generate_password(),
             hosts=self.charm.mongodb_config.hosts,
             roles=self._get_roles_from_relation(relation),
+            tls_external=False,
+            tls_internal=False,
         )
 
     def _set_relation(self, config: MongoDBConfiguration):
