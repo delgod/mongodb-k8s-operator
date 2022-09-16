@@ -72,6 +72,22 @@ juju relate tls-certificates-operator mongodb
 juju remove-relation mongodb tls-certificates-operator
 ```
 
+It is possible to use custom private key for both internal and external communications:
+```shell
+# generate shared internal key
+openssl genrsa -out internal-key.pem 3072
+
+# generate external keys for each unit
+openssl genrsa -out external-key-0.pem 3072
+openssl genrsa -out external-key-1.pem 3072
+openssl genrsa -out external-key-2.pem 3072
+
+# apply both private keys on each unit, shared internal key will be allied only on juju leader
+juju run-action mongodb-k8s/0 set-tls-private-key "external-key=$(cat external-key-0.pem)"  "internal-key=$(cat internal-key.pem)"  --wait
+juju run-action mongodb-k8s/1 set-tls-private-key "external-key=$(cat external-key-1.pem)"  "internal-key=$(cat internal-key.pem)"  --wait
+juju run-action mongodb-k8s/2 set-tls-private-key "external-key=$(cat external-key-2.pem)"  "internal-key=$(cat internal-key.pem)"  --wait
+```
+
 Note: The TLS settings here are for self-signed-certificates which are not recommended for production clusters, the `tls-certificates-operator` charm offers a variety of configurations, read more on the TLS charm [here](https://charmhub.io/tls-certificates-operator)
 
 
