@@ -43,9 +43,10 @@ PEER = "database-peers"
 Diff = namedtuple("Diff", "added changed deleted")
 Diff.__doc__ = """
 A tuple for storing the diff between two data mappings.
-added — keys that were added
-changed — keys that still exist but have new values
-deleted — key that were deleted."""
+    — added: keys that were added
+    — changed: keys that still exist but have new values
+    — deleted: keys that were deleted.
+"""
 
 
 class MongoDBProvider(Object):
@@ -244,7 +245,7 @@ class MongoDBProvider(Object):
         # We generated username in `_get_users_from_relations`
         # func and passed it into this function later.
         # It means the username here MUST match regex.
-        assert match is not None, "No relation match"
+        assert match is not None, "Username doesn't match relation regex"
         relation_id = int(match.group(1))
         logger.debug("Relation ID: %s", relation_id)
         return self.model.get_relation(REL_NAME, relation_id)

@@ -1,21 +1,18 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""In this class we manage client database relations.
+"""In this class, we manage client database relations.
 
-This class creates user and database for each application relation
+This class creates a user and database for each application relation
 and expose needed information for client connection via fields in
 external relation.
 """
-import json
-import re
-import logging
 import base64
+import logging
+import re
 import socket
-from cryptography import x509
-from cryptography.x509.extensions import ExtensionType
-from ops.framework import Object
-from ops.charm import ActionEvent, RelationJoinedEvent, RelationBrokenEvent
+from typing import List, Optional, Tuple
+
 from charms.tls_certificates_interface.v1.tls_certificates import (
     CertificateAvailableEvent,
     CertificateExpiringEvent,
@@ -23,7 +20,8 @@ from charms.tls_certificates_interface.v1.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
-from typing import List, Optional, Tuple
+from ops.charm import ActionEvent, RelationBrokenEvent, RelationJoinedEvent
+from ops.framework import Object
 
 # The unique Charmhub library identifier, never change it
 LIBID = "1057f353503741a98ed79309b5be7e33"
@@ -40,7 +38,7 @@ TLS_RELATION = "certificates"
 
 
 class MongoDBTLS(Object):
-    """In this class we manage client database relations."""
+    """In this class, we manage client database relations."""
 
     def __init__(self, charm, peer_relation):
         """Manager of MongoDB client relations."""
@@ -62,16 +60,16 @@ class MongoDBTLS(Object):
 
     def _on_set_tls_private_key(self, event: ActionEvent) -> None:
         """Set the TLS private key, which will be used for requesting the certificate."""
-        logger.debug("Request to set TLS private key recieved.")
+        logger.debug("Request to set TLS private key received.")
         try:
             self._request_certificate("unit", event.params.get("external-key", None))
             if not self.charm.unit.is_leader():
                 event.log(
-                    "Only juju leader unit can set private key for the internal certificate. Skipping."
+                    "Only juju leader unit can set a private key for the internal certificate. Skipping."
                 )
                 return
             self._request_certificate("app", event.params.get("internal-key", None))
-            logger.debug("Succesfully set TLS private key.")
+            logger.debug("Successfully set the TLS private key.")
         except ValueError as e:
             event.fail(str(e))
 
@@ -178,10 +176,10 @@ class MongoDBTLS(Object):
     def _on_certificate_expiring(self, event: CertificateExpiringEvent) -> None:
         """Request the new certificate when old certificate is expiring."""
         if event.certificate.rstrip() == self.charm.get_secret("unit", "cert").rstrip():
-            logger.debug("The external TLS certificate expiring.")
+            logger.debug("The external TLS certificate is expiring.")
             scope = "unit"  # external cert
         elif event.certificate.rstrip() == self.charm.get_secret("app", "cert").rstrip():
-            logger.debug("The internal TLS certificate expiring.")
+            logger.debug("The internal TLS certificate is expiring.")
             if not self.charm.unit.is_leader():
                 return
             scope = "app"  # internal cert
@@ -220,11 +218,11 @@ class MongoDBTLS(Object):
         ]
 
     def get_tls_files(self, scope: str) -> Tuple[Optional[str], Optional[str]]:
-        """Prepare TLS files in special MongoDB way.
+        """Prepare TLS files in the special MongoDB way.
 
         MongoDB needs two files:
         — CA file should have a full chain.
-        — PEM file should have private key and certificate without certificate chain.
+        — PEM file should have a private key and certificate without certificate chain.
         """
         ca = self.charm.get_secret(scope, "ca")
         chain = self.charm.get_secret(scope, "chain")
