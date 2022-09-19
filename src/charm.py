@@ -6,7 +6,7 @@
 
 Run the developer's favourite document database — MongoDB! Charm for MongoDB is a fully supported,
 automated solution from Canonical for running production-grade MongoDB on Kubernetes. It offers
-simple, secure and highly available setup with automatic recovery on fail-over. The solution
+a simple, secure and highly available setup with automatic recovery on fail-over. The solution
 includes scaling and other capabilities.
 """
 
@@ -63,8 +63,8 @@ class MongoDBCharm(CharmBase):
     def _generate_passwords(self) -> None:
         """Generate passwords and put them into peer relation.
 
-        The same keyFile and operator password on all members needed.
-        It means, it is needed to generate them once and share between members.
+        The same keyFile and operator password on all members are needed.
+        It means it is needed to generate them once and share between members.
         NB: only leader should execute this function.
         """
         if not self.get_secret("app", "operator_password"):
@@ -116,17 +116,17 @@ class MongoDBCharm(CharmBase):
 
         Initialization of replSet should be made once after start.
         MongoDB needs some time to become fully started.
-        This event handler is deferred if initialization of MongoDB
-        replica set fails. By doing so it is guaranteed that another
+        This event handler is deferred if initialization of the MongoDB
+        replica set fails. By doing so, it is guaranteed that another
         attempt at initialization will be made.
 
-        Initial operator user can be created only through localhost connection.
+        The initial operator user can be created only through localhost connection.
         see https://www.mongodb.com/docs/manual/core/localhost-exception/
-        unfortunately, pymongo unable to create connection that considered
+        unfortunately, pymongo unable to create a connection that is considered
         as local connection by MongoDB, even if socket connection used.
-        As result, where are only hackish ways to create initial user.
-        It is needed to install mongodb-clients inside charm container to make
-        this function work correctly.
+        As a result, there are only hackish ways to create initial user.
+        It is needed to install mongodb-clients inside the charm container to
+        make this function work correctly.
         """
         if not self.unit.is_leader():
             return
@@ -194,7 +194,7 @@ class MongoDBCharm(CharmBase):
             try:
                 replset_members = mongo.get_replset_members()
 
-                # compare set of mongod replica set members and juju hosts
+                # Compare the set of mongod replica set members and juju hosts
                 # to avoid the unnecessary reconfiguration.
                 if replset_members == self.mongodb_config.hosts:
                     return
@@ -202,10 +202,10 @@ class MongoDBCharm(CharmBase):
                 # remove members first, it is faster
                 logger.info("Reconfigure replica set")
                 for member in replset_members - self.mongodb_config.hosts:
-                    logger.debug("Removing %s from replica set", member)
+                    logger.debug("Removing %s from the replica set", member)
                     mongo.remove_replset_member(member)
                 for member in self.mongodb_config.hosts - replset_members:
-                    logger.debug("Adding %s to replica set", member)
+                    logger.debug("Adding %s to the replica set", member)
                     with MongoDBConnection(
                         self.mongodb_config, member, direct=True
                     ) as direct_mongo:
@@ -387,13 +387,13 @@ class MongoDBCharm(CharmBase):
     def _init_user(self, container: Container) -> None:
         """Creates initial operator user for MongoDB.
 
-        Initial operator user can be created only through localhost connection.
+        The initial operator user can be created only through localhost connection.
         see https://www.mongodb.com/docs/manual/core/localhost-exception/
-        unfortunately, pymongo unable to create connection that considered
+        unfortunately, pymongo unable to create a connection that is considered
         as local connection by MongoDB, even if socket connection used.
-        As a result, where are only hackish ways to create initial user.
-        It is needed to install mongodb-clients inside charm container to make
-        this function work correctly.
+        As a result, there are only hackish ways to create initial user.
+        It is needed to install mongodb-clients inside the charm container to
+        make this function work correctly.
         """
         if "user_created" in self.app_peer_data:
             return
@@ -425,7 +425,7 @@ class MongoDBCharm(CharmBase):
 
     def _on_set_password(self, event: ActionEvent) -> None:
         """Set the password for the specified user."""
-        # only leader can write the new password into peer relation.
+        # only leader can write a new password into peer relation.
         if not self.unit.is_leader():
             event.fail("The action can be run only on leader unit.")
             return
@@ -453,7 +453,7 @@ class MongoDBCharm(CharmBase):
                 mongo.set_user_password(username, new_password)
             except NotReadyError:
                 event.fail(
-                    "Failed changing the password: Not all members healthy or finished initial sync."
+                    "Failed to change the password: Not all members are healthy or finished initial sync."
                 )
                 return
             except PyMongoError as e:
