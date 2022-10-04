@@ -154,7 +154,7 @@ class MongoDBTLS(Object):
         old_cert = self.charm.get_secret(scope, "cert")
         renewal = old_cert and old_cert != event.certificate
 
-        if scope == "unit" or (scope == "app" and self.charm.unit.is_leader):
+        if scope == "unit" or (scope == "app" and self.charm.unit.is_leader()):
             self.charm.set_secret(
                 scope, "chain", "\n".join(event.chain) if event.chain is not None else None
             )
