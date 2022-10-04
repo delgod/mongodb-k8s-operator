@@ -146,8 +146,6 @@ class MongoDBTLS(Object):
             == self.charm.get_secret("app", "csr").rstrip()
         ):
             logger.debug("The internal TLS certificate available.")
-            if not self.charm.unit.is_leader():
-                return
             scope = "app"  # internal crs
         else:
             logger.error("An unknown certificate available.")
