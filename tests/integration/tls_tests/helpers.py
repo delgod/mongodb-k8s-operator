@@ -8,16 +8,13 @@ import yaml
 import ops
 from pytest_operator.plugin import OpsTest
 from tenacity import RetryError, Retrying, stop_after_attempt, wait_exponential
-from types import SimpleNamespace
 
-from tests.integration.helpers import get_password, mongodb_uri
+from tests.integration.helpers import get_password
 
 PORT = 27017
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
 
-import logging
-logger = logging.getLogger(__name__)
 
 class ProcessError(Exception):
     """Raised when a process fails."""
@@ -53,9 +50,7 @@ async def check_tls(ops_test: OpsTest, unit: ops.model.Unit, enabled: bool) -> b
             stop=stop_after_attempt(10), wait=wait_exponential(multiplier=1, min=2, max=30)
         ):
             with attempt:
-                # mongod_tls_check = await mongo_tls_command(ops_test)
-                logger.info("checking TLS")
-                return_code, _, _ = await run_tls_check(ops_test)
+                return_code = await run_tls_check(ops_test, unit)
                 tls_enabled = return_code == 0
                 if enabled != tls_enabled:
                     raise ValueError(
@@ -65,41 +60,28 @@ async def check_tls(ops_test: OpsTest, unit: ops.model.Unit, enabled: bool) -> b
     except RetryError:
         return False
 
-async def run_tls_check(ops_test):
-    mongo_uri = await mongodb_uri(ops_test)
-    logger.info(mongo_uri)
+def parse_hostname(hostname:str) -> str:
+    """Parses a hostname to the corresponding enpoint version."""
+    return hostname.replace("/","-") + ".mongodb-k8s-endpoints"
 
-    mongo_cmd = (f"mongo {mongo_uri} --eval 'JSON.stringify(rs.status())'"
+
+async def run_tls_check(ops_test: OpsTest, unit: ops.model.Unit) -> int:
+    """Returns the return code of the TLS check."""
+    hosts = [parse_hostname(unit.name) for unit in ops_test.model.applications[APP_NAME].units]
+    hosts = ",".join(hosts)
+    password = await get_password(ops_test, unit_id=0)
+    mongo_uri = f"mongodb://operator:{password}@{hosts}/admin?"
+
+    mongo_cmd = (f"/usr/bin/mongosh {mongo_uri} --eval 'rs.status()'"
         f" --tls --tlsCAFile /etc/mongodb/external-ca.crt"
         f" --tlsCertificateKeyFile /etc/mongodb/external-cert.pem"
     )
-    logger.info(mongo_cmd)
 
-
-    kubectl_cmd = (
-        "microk8s",
-        "kubectl",
-        "run",
-        "--rm",
-        "-i",
-        "-q",
-        "--restart=Never",
-        "--command",
-        f"--namespace={ops_test.model_name}",
-        "mongo-test",
-        "--image=mongo:4.4",
-        "--",
-        "sh",
-        "-c",
-        mongo_cmd,
-    )
-
-    ret_code, stdout, stderr = await ops_test.run(*kubectl_cmd)
-    logger.info(stdout)
-    logger.info(stderr)
+    complete_command = f"ssh --container mongod {unit.name} {mongo_cmd}"
+    ret_code, _, _ = await ops_test.juju(*complete_command.split())
 
     return ret_code
-
+    
 
 async def time_file_created(ops_test: OpsTest, unit_name: str, path: str) -> int:
     """Returns the unix timestamp of when a file was created on a specified unit."""

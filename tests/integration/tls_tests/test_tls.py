@@ -184,15 +184,15 @@ async def test_enable_tls(ops_test: OpsTest) -> None:
 #         ), f"tls is not enabled for {unit.name}."
 
 
-# async def test_disable_tls(ops_test: OpsTest) -> None:
-#     """Verify each unit has TLS disabled after removing relation to the TLS application."""
-#     # Remove the relation.
-#     await ops_test.model.applications[DATABASE_APP_NAME].remove_relation(
-#         f"{DATABASE_APP_NAME}:certificates", f"{TLS_CERTIFICATES_APP_NAME}:certificates"
-#     )
-#     async with ops_test.fast_forward():
-#         await ops_test.model.wait_for_idle(apps=[DATABASE_APP_NAME], status="active", timeout=1000)
+async def test_disable_tls(ops_test: OpsTest) -> None:
+    """Verify each unit has TLS disabled after removing relation to the TLS application."""
+    # Remove the relation.
+    await ops_test.model.applications[DATABASE_APP_NAME].remove_relation(
+        f"{DATABASE_APP_NAME}:certificates", f"{TLS_CERTIFICATES_APP_NAME}:certificates"
+    )
+    async with ops_test.fast_forward():
+        await ops_test.model.wait_for_idle(apps=[DATABASE_APP_NAME], status="active", timeout=1000)
 
-#     # Wait for all units disabling TLS.
-#     for unit in ops_test.model.applications[DATABASE_APP_NAME].units:
-#         assert await check_tls(ops_test, unit, enabled=False)
+    # Wait for all units disabling TLS.
+    for unit in ops_test.model.applications[DATABASE_APP_NAME].units:
+        assert await check_tls(ops_test, unit, enabled=False)
