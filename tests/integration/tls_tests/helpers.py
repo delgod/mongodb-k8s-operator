@@ -24,7 +24,7 @@ class ProcessError(Exception):
 
 
 async def check_tls(ops_test: OpsTest, unit: ops.model.Unit, enabled: bool) -> bool:
-    """Returns whether TLS is enabled on the specific PostgreSQL instance.
+    """Returns whether TLS is enabled on the specific MongoDB instance.
 
     Args:
         ops_test: The ops test framework instance.

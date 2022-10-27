@@ -23,7 +23,7 @@ DB_SERVICE = "mongod.service"
 
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest) -> None:
-    """Build and deploy one unit of MongoDB and one unit of TLS."""
+    """Build and deploy three units of MongoDB and one unit of TLS."""
     async with ops_test.fast_forward():
         my_charm = await ops_test.build_charm(".")
         resources = {"mongodb-image": METADATA["resources"]["mongodb-image"]["upstream-source"]}
@@ -39,7 +39,7 @@ async def test_build_and_deploy(ops_test: OpsTest) -> None:
 
 async def test_enable_tls(ops_test: OpsTest) -> None:
     """Verify each unit has TLS enabled after relating to the TLS application."""
-    # Relate it to the PostgreSQL to enable TLS.
+    # Relate it to the MongoDB to enable TLS.
     await ops_test.model.relate(DATABASE_APP_NAME, TLS_CERTIFICATES_APP_NAME)
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(status="active", timeout=1000)
