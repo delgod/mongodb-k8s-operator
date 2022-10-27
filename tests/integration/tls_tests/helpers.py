@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
+import logging
 from datetime import datetime
-
 from pathlib import Path
-import yaml
+
 import ops
+import yaml
 from pytest_operator.plugin import OpsTest
 from tenacity import RetryError, Retrying, stop_after_attempt, wait_exponential
 
 from tests.integration.helpers import get_password
+
+logger = logging.getLogger(__name__)
 
 PORT = 27017
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
@@ -18,20 +21,6 @@ APP_NAME = METADATA["name"]
 
 class ProcessError(Exception):
     """Raised when a process fails."""
-
-
-async def mongo_tls_command(ops_test: OpsTest) -> str:
-    """Generates a command which verifies TLS status."""
-    replica_set_hosts = [unit.public_address for unit in ops_test.model.applications[APP_NAME].units]
-    password = await get_password(ops_test, APP_NAME)
-    hosts = ",".join(replica_set_hosts)
-    replica_set_uri = f"mongodb://admin:" f"{password}@" f"{hosts}/admin?replicaSet={APP_NAME}"
-
-    return (
-        f"mongo '{replica_set_uri}'  --eval 'rs.status()'"
-        f" --tls --tlsCAFile /etc/mongodb/external-ca.crt"
-        f" --tlsCertificateKeyFile /etc/mongodb/external-cert.pem"
-    )
 
 
 async def check_tls(ops_test: OpsTest, unit: ops.model.Unit, enabled: bool) -> bool:
@@ -60,9 +49,10 @@ async def check_tls(ops_test: OpsTest, unit: ops.model.Unit, enabled: bool) -> b
     except RetryError:
         return False
 
-def parse_hostname(hostname:str) -> str:
-    """Parses a hostname to the corresponding enpoint version."""
-    return hostname.replace("/","-") + ".mongodb-k8s-endpoints"
+
+def parse_hostname(hostname: str) -> str:
+    """Parses a hostname to the corresponding endpoint version."""
+    return hostname.replace("/", "-") + ".mongodb-k8s-endpoints"
 
 
 async def run_tls_check(ops_test: OpsTest, unit: ops.model.Unit) -> int:
@@ -72,7 +62,8 @@ async def run_tls_check(ops_test: OpsTest, unit: ops.model.Unit) -> int:
     password = await get_password(ops_test, unit_id=0)
     mongo_uri = f"mongodb://operator:{password}@{hosts}/admin?"
 
-    mongo_cmd = (f"/usr/bin/mongosh {mongo_uri} --eval 'rs.status()'"
+    mongo_cmd = (
+        f"/usr/bin/mongosh {mongo_uri} --eval 'rs.status()'"
         f" --tls --tlsCAFile /etc/mongodb/external-ca.crt"
         f" --tlsCertificateKeyFile /etc/mongodb/external-cert.pem"
     )
@@ -81,16 +72,21 @@ async def run_tls_check(ops_test: OpsTest, unit: ops.model.Unit) -> int:
     ret_code, _, _ = await ops_test.juju(*complete_command.split())
 
     return ret_code
-    
+
 
 async def time_file_created(ops_test: OpsTest, unit_name: str, path: str) -> int:
     """Returns the unix timestamp of when a file was created on a specified unit."""
-    time_cmd = f"run --unit {unit_name} --  ls -l --time-style=full-iso {path} "
-    return_code, ls_output, _ = await ops_test.juju(*time_cmd.split())
+    time_cmd = f"ls -l --time-style=full-iso {path} "
+    complete_command = f"ssh --container mongod {unit_name} {time_cmd}"
+    return_code, ls_output, stderr = await ops_test.juju(*complete_command.split())
 
     if return_code != 0:
+        logger.error(stderr)
         raise ProcessError(
-            "Expected time command %s to succeed instead it failed: %s", time_cmd, return_code
+            "Expected time command %s to succeed instead it failed: %s; %s",
+            time_cmd,
+            return_code,
+            stderr,
         )
 
     return process_ls_time(ls_output)
@@ -98,17 +94,34 @@ async def time_file_created(ops_test: OpsTest, unit_name: str, path: str) -> int
 
 async def time_process_started(ops_test: OpsTest, unit_name: str, process_name: str) -> int:
     """Retrieves the time that a given process started according to systemd."""
-    time_cmd = (
-        f"run --unit {unit_name} --  systemctl show {process_name} --property=ActiveEnterTimestamp"
-    )
-    return_code, systemctl_output, _ = await ops_test.juju(*time_cmd.split())
+    logs = await run_command_on_unit(ops_test, unit_name, "/charm/bin/pebble changes")
 
+    # find most recent start time. By parsing most recent logs (ie in reverse order)
+    for log in reversed(logs.split("\n")):
+        if "Replan" in log:
+            return process_pebble_time(log.split()[4])
+
+    raise Exception("Service was never started")
+
+
+async def run_command_on_unit(ops_test: OpsTest, unit_name: str, command: str) -> str:
+    """Run a command on a specific unit.
+
+    Args:
+        ops_test: The ops test framework instance
+        unit_name: The name of the unit to run the command on
+        command: The command to run
+
+    Returns:
+        the command output if it succeeds, otherwise raises an exception.
+    """
+    complete_command = f"ssh --container mongod {unit_name} {command}"
+    return_code, stdout, _ = await ops_test.juju(*complete_command.split())
     if return_code != 0:
-        raise ProcessError(
-            "Expected time command %s to succeed instead it failed: %s", time_cmd, return_code
+        raise Exception(
+            "Expected command %s to succeed instead it failed: %s", command, return_code
         )
-
-    return process_systemctl_time(systemctl_output)
+    return stdout
 
 
 def process_ls_time(ls_output):
@@ -120,9 +133,7 @@ def process_ls_time(ls_output):
     return d
 
 
-def process_systemctl_time(systemctl_output):
-    """Parse time representation as returned by the 'systemctl' command."""
-    "ActiveEnterTimestamp=Thu 2022-09-22 10:00:00 UTC"
-    time_as_str = "T".join(systemctl_output.split("=")[1].split(" ")[1:3])
-    d = datetime.strptime(time_as_str, "%Y-%m-%dT%H:%M:%S")
+def process_pebble_time(changes_output):
+    """Parse time representation as returned by the 'pebble changes' command."""
+    d = datetime.strptime(changes_output, "%H:%M")
     return d
