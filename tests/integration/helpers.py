@@ -6,7 +6,7 @@ import logging
 import math
 from datetime import datetime
 from pathlib import Path
-from random import choices
+from random import choices, seed
 from string import ascii_lowercase, digits
 from types import SimpleNamespace
 from typing import List, Optional
@@ -215,5 +215,55 @@ async def secondary_mongo_uris_with_sync_delay(ops_test: OpsTest, rs_status_data
 
 
 def generate_collection_id() -> str:
-    new_id = "".join(choices(ascii_lowercase + digits, k=4)).replace("_", "")
+    """Generates a short and random Mongodb collection id."""
+    # force updating the seed to the current time
+    seed(datetime.now())
+
+    new_id = "".join(choices(ascii_lowercase + digits, k=4))
     return f"collection_{new_id}"
+
+
+def get_latest_unit_id(ops_test: OpsTest) -> int:
+    units = ops_test.model.applications[APP_NAME].units
+
+    unit_ids = [unit.name.split("/")[-1] for unit in units]
+
+    return int(max(unit_ids))
+
+
+async def get_current_storage_info(ops_test: OpsTest) -> SimpleNamespace:
+    """Returns the info of the storage state of the latest juju unit.
+
+    Returns:
+        SimpleNamespace(
+            unit_id=latest_juju_unit_id,
+            k8s_volume_id=corresponding K8s pvc id
+        )
+    """
+
+    def get_unit_volume_ids(full_storage_obj) -> dict:
+        result = {}
+        for key, val in full_storage_obj.items():
+            if val["status"]["current"] != "attached":
+                continue
+
+            for unit_name, unit_body in val["attachments"]["units"].items():
+                if unit_body.get("life", None) != "alive":
+                    continue
+
+                result[unit_name.split("/")[-1]] = val["provider-id"]
+                break
+
+        return result
+
+    storage_resp = await ops_test.juju("list-storage", "--format=json")
+    storage = json.loads(storage_resp[1])
+
+    juju_units_storage_map = get_unit_volume_ids(storage["volumes"])
+
+    latest_juju_unit_id = get_latest_unit_id(ops_test)
+
+    return SimpleNamespace(
+        unit_id=latest_juju_unit_id,
+        k8s_volume_id=juju_units_storage_map[str(latest_juju_unit_id)],
+    )
